@@ -15,7 +15,7 @@ import dev.obsidian.client.core.ThemeManager;
 import dev.obsidian.client.core.UpdateChecker;
 import dev.obsidian.client.module.DiscordRpcModule;
 import dev.obsidian.client.module.Module;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;

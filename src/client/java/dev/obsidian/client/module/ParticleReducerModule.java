@@ -2,7 +2,7 @@ package dev.obsidian.client.module;
 
 import dev.obsidian.client.core.Setting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.ParticleStatus;
+import net.minecraft.server.level.ParticleStatus;
 
 /** Fewer particles for more FPS. Restores your setting when off. */
 public class ParticleReducerModule extends Module {

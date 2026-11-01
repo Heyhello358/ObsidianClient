@@ -3,7 +3,7 @@ package dev.obsidian.client.module;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
-import net.minecraft.client.ParticleStatus;
+import net.minecraft.server.level.ParticleStatus;
 
 /** Lowers a few video options for more FPS. Your old values come back when you switch it off or quit. */
 public class FpsOptimizerModule extends Module {

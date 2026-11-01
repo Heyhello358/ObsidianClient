@@ -16,6 +16,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build
         run: chmod +x gradlew && ./gradlew build -Pversion=0.2.${{ github.run_number }}
+      - name: Probe Minecraft classes (temporary)
+        continue-on-error: true
+        run: |
+          find ~/.gradle/caches -name '*.jar' | grep -iE 'minecraft' | head -20
+          J=$(find ~/.gradle/caches -name '*.jar' | grep -iE 'minecraft.*(merged|client|mapped)' | grep -v sources | head -1)
+          echo "JAR=$J"
+          unzip -l "$J" | grep -iE "ParticleStatus|DebugScreenEntr|EntityRenderDispatcher|DebugRenderer|HitboxRenderer" | awk '{print $4}' | head -30
+          for c in net.minecraft.client.renderer.entity.EntityRenderDispatcher net.minecraft.client.gui.components.debug.DebugScreenEntries; do echo "== $c"; javap -p -cp "$J" $c 2>&1 | grep -iE "hitbox|Hitbox|static .*Identifier" | head -20; done
       - uses: actions/upload-artifact@v4
         with:
           name: ObsidianClient-jar
