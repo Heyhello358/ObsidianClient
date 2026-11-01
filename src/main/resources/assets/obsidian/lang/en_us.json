@@ -1,5 +1,8 @@
 {
 	"key.obsidian.menu": "Open Obsidian Menu",
 	"key.obsidian.zoom": "Zoom",
+	"key.obsidian.freelook": "Freelook",
+	"key.obsidian.togglesprint": "Toggle Sprint",
+	"key.obsidian.togglesneak": "Toggle Sneak",
 	"key.category.obsidian.main": "Obsidian Client"
 }
