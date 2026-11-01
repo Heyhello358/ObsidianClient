@@ -5,10 +5,13 @@ It only displays information you already have and adds quality-of-life tools.
 
 ![Obsidian Client](src/main/resources/assets/obsidian/logo.png)
 
-**Modules:** FPS, CPS, Coordinates, Direction, Ping, Clock, Keystrokes, Armor Status, Zoom.
+**Gameplay:** FPS, CPS, Keystrokes, Toggle Sprint, Toggle Sneak, Zoom, Freelook, Hitboxes, Armor Status, Potion Effects, Coordinates, Direction, Ping, Clock, Memory.
+**PvP (display only):** Combo, Reach Display, W-Tap Counter, Hit Delay, Damage Indicator, Target HUD, Attack Indicator.
+**Visuals:** Custom Crosshair, Scoreboard customizer, Custom Main Menu logo, themes (Purple / Blue / Red / Custom colour), animated UI.
+**Performance:** FPS Optimizer, Particle Reducer.
+**Obsidian:** tabbed menu, HUD editor, profiles, local account stats, built-in update checker, Discord Rich Presence.
 
-**Keys:** Right Shift opens the menu (click a card to toggle it, "Edit HUD" to drag things around). C zooms (rebindable).
-Settings are saved to `config/obsidian.json`.
+**Keys:** Right Shift menu, C zoom, Alt freelook, V toggle sprint, B toggle sneak (all rebindable). Settings are saved to `config/obsidian.json`.
 
 ## Discord Rich Presence
 Shows "Obsidian Client" on your Discord profile with a **Join Discord** button (https://discord.gg/XAj6Xb9t9A).
