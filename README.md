@@ -23,7 +23,7 @@ Discord hides your own buttons from you; other people see them. Toggle it with t
 Push this folder to a GitHub repo. The Actions tab builds it automatically; download `ObsidianClient-jar` from the finished run.
 
 ## Build locally
-Needs JDK 21 and internet access to Mojang/Fabric servers.
+Needs JDK 25 to run the build (the mod itself targets Java 21) and internet access to Mojang/Fabric servers.
 
     ./gradlew build
 
