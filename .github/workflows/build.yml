@@ -19,11 +19,13 @@ jobs:
       - name: Probe Minecraft classes (temporary)
         continue-on-error: true
         run: |
-          find ~/.gradle/caches -name '*.jar' | grep -iE 'minecraft' | head -20
-          J=$(find ~/.gradle/caches -name '*.jar' | grep -iE 'minecraft.*(merged|client|mapped)' | grep -v sources | head -1)
-          echo "JAR=$J"
-          unzip -l "$J" | grep -iE "ParticleStatus|DebugScreenEntr|EntityRenderDispatcher|DebugRenderer|HitboxRenderer" | awk '{print $4}' | head -30
-          for c in net.minecraft.client.renderer.entity.EntityRenderDispatcher net.minecraft.client.gui.components.debug.DebugScreenEntries; do echo "== $c"; javap -p -cp "$J" $c 2>&1 | grep -iE "hitbox|Hitbox|static .*Identifier" | head -20; done
+          for J in $(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' -o -name 'minecraft-common-1.21.11*.jar' | grep -v intermediary); do
+            echo "JAR=$J"
+            unzip -l "$J" | awk '{print $4}' | grep -iE "hitbox|debug/DebugScreenEntr|DebugScreenEntryStatus|DebugScreenEntryList" | head -20
+          done
+          J=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' | grep -v intermediary | head -1)
+          for c in net.minecraft.client.gui.components.debug.DebugScreenEntries net.minecraft.client.gui.components.debug.DebugScreenEntryList; do echo "== $c"; javap -p -cp "$J" $c 2>&1 | grep -iE "hitbox|public|status" | head -25; done
+          echo "== Minecraft debug fields"; javap -p -cp "$J" net.minecraft.client.Minecraft 2>&1 | grep -iE "debug" | head -15
       - uses: actions/upload-artifact@v4
         with:
           name: ObsidianClient-jar
