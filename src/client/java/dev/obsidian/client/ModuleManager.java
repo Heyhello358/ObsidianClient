@@ -30,6 +30,7 @@ public final class ModuleManager {
 		MODULES.add(new ToggleSneakModule(4, 146));
 		MODULES.add(new ZoomModule());
 		MODULES.add(new FreelookModule());
+		MODULES.add(new HitboxesModule());
 		MODULES.add(new ArmorModule(sw - 60, sh / 2 - 45));
 		MODULES.add(new PotionModule(sw - 110, 4));
 		MODULES.add(new TextModule("coords", "Coordinates", "Shows your position", G, 70, 4, () -> {

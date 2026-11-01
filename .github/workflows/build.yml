@@ -16,26 +16,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build
         run: chmod +x gradlew && ./gradlew build -Pversion=0.2.${{ github.run_number }}
-      - name: Probe Minecraft classes (temporary)
-        continue-on-error: true
-        run: |
-          for J in $(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' -o -name 'minecraft-common-1.21.11*.jar' | grep -v intermediary); do
-            echo "JAR=$J"
-            unzip -l "$J" | awk '{print $4}' | grep -iE "hitbox|debug/DebugScreenEntr|DebugScreenEntryStatus|DebugScreenEntryList" | head -20
-          done
-          J=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' | grep -v intermediary | head -1)
-          for c in net.minecraft.client.gui.components.debug.DebugScreenEntries net.minecraft.client.gui.components.debug.DebugScreenEntryList; do echo "== $c"; javap -p -cp "$J" $c 2>&1 | grep -iE "hitbox|public|status" | head -25; done
-          echo "== Minecraft debug fields"; javap -p -cp "$J" net.minecraft.client.Minecraft 2>&1 | grep -iE "debug" | head -15
       - uses: actions/upload-artifact@v4
         with:
           name: ObsidianClient-jar
           path: build/libs/*.jar
+      - name: Pick the main jar
+        run: mkdir dist && cp "$(ls build/libs/*.jar | grep -v sources | head -1)" dist/
       - name: Publish release (main branch only)
         if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          JAR=$(ls build/libs/*.jar | grep -v sources | head -1)
-          gh release create "v0.2.${{ github.run_number }}" "$JAR" \
-            --title "Obsidian Client 0.2.${{ github.run_number }}" \
-            --notes "Automatic build of commit ${GITHUB_SHA::7}. Needs Minecraft 1.21.11 + Fabric Loader + Fabric API."
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.${{ github.run_number }}
+          name: Obsidian Client 0.2.${{ github.run_number }}
+          body: Automatic build. Needs Minecraft 1.21.11 + Fabric Loader + Fabric API.
+          files: dist/*.jar
