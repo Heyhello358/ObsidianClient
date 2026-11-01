@@ -1,0 +1,26 @@
+{
+	"schemaVersion": 1,
+	"id": "obsidian",
+	"version": "${version}",
+	"name": "Obsidian Client",
+	"description": "A clean, legit client-side utility suite: HUD modules, zoom and quality-of-life tools. No cheats.",
+	"authors": ["stevedev3"],
+	"license": "MIT",
+	"icon": "assets/obsidian/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.obsidian.client.ObsidianClient"]
+	},
+	"mixins": [
+		{
+			"config": "obsidian.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
