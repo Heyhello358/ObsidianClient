@@ -59,7 +59,7 @@ public final class ModuleManager {
 		// Visuals
 		MODULES.add(new CrosshairModule());
 		MODULES.add(new ScoreboardModule());
-		MODULES.add(new FlagModule("mainmenu", "Custom Main Menu", "Obsidian logo and info on the title screen", Module.Category.VISUALS));
+		MODULES.add(new FlagModule("mainmenu", "Custom Main Menu", "Obsidian title screen with logo and buttons", Module.Category.VISUALS));
 
 		// Performance
 		MODULES.add(new FpsOptimizerModule());

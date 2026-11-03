@@ -8,7 +8,7 @@ import dev.obsidian.client.config.Config;
 import dev.obsidian.client.core.CombatState;
 import dev.obsidian.client.core.Stats;
 import dev.obsidian.client.core.UpdateChecker;
-import dev.obsidian.client.gui.MainMenuOverlay;
+import dev.obsidian.client.gui.ObsidianTitleScreen;
 import dev.obsidian.client.gui.MenuScreen;
 import dev.obsidian.client.module.*;
 import net.fabricmc.api.ClientModInitializer;
@@ -17,7 +17,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -89,15 +88,13 @@ public class ObsidianClient implements ClientModInitializer {
 			orig.render(g, tc);
 			g.pose().popMatrix();
 		});
-
-		// Title screen logo
-		ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
-			if (screen instanceof TitleScreen)
-				ScreenEvents.afterRender(screen).register((s, g, mx, my, d) -> MainMenuOverlay.renderTitle(g, s.width, s.height));
-		});
 	}
 
 	private void tick(Minecraft mc) {
+		// Swap the vanilla title screen for ours (when "Custom Main Menu" is on).
+		var mm = ModuleManager.get("mainmenu");
+		if (mm != null && mm.isEnabled() && mc.screen != null && mc.screen.getClass() == TitleScreen.class)
+			mc.setScreen(new ObsidianTitleScreen());
 		while (openMenu.consumeClick()) mc.setScreen(new MenuScreen());
 		ZoomModule.held = zoomKey.isDown();
 		FreelookModule.keyHeld = freelookKey.isDown();
