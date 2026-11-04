@@ -4,7 +4,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.security.SecureRandom;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +22,11 @@ import com.google.gson.JsonParser;
 
 import dev.obsidian.client.module.NametagModule;
 import net.minecraft.client.Minecraft;
+import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import net.minecraft.client.User;
+import net.minecraft.util.SignatureValidator;
+import net.minecraft.util.Signer;
+import net.minecraft.world.entity.player.ProfileKeyPair;
 
 /**
  * Talks to the Obsidian backend. Your identity is proven through Mojang (joinServer): your access token
@@ -31,7 +38,6 @@ public final class ObsidianNet {
 
 	private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 	private static final Map<UUID, Tag> TAGS = new ConcurrentHashMap<>();
-	private static final SecureRandom RNG = new SecureRandom();
 
 	public static volatile boolean admin;
 	public static volatile Role myRole = Role.MEMBER;
@@ -113,32 +119,49 @@ public final class ObsidianNet {
 	}
 
 	// ---- login + http ----
+	/**
+	 * Proves who you are without sending any secret: Minecraft holds a certificate that Mojang signed for your
+	 * account (UUID + public key). We sign a one-time challenge from our server with the matching private key.
+	 * The server checks Mojang's signature on the certificate and your signature on the challenge. Your
+	 * private key and access token never leave your computer.
+	 */
 	private static synchronized void ensureLogin() throws Exception {
 		if (token != null && System.currentTimeMillis() < tokenExp - 60_000) return;
 		Minecraft mc = Minecraft.getInstance();
 		User u = mc.getUser();
-		byte[] b = new byte[16];
-		RNG.nextBytes(b);
-		StringBuilder sid = new StringBuilder();
-		for (byte x : b) sid.append(String.format("%02x", x));
-		try {
-			mc.services().sessionService().joinServer(u.getProfileId(), u.getAccessToken(), sid.toString());
-		} catch (Exception e) {
-			throw new Exception("sign in with a Microsoft account to use this");
-		}
+
+		ProfileKeyPair kp = mc.getProfileKeyPairManager().prepareKeyPair().get(15, TimeUnit.SECONDS)
+			.orElseThrow(() -> new Exception("no Mojang certificate - sign in with a Microsoft account"));
+		var data = kp.publicKey().data();
+		byte[] keyDer = data.key().getEncoded();
+		UUID id = u.getProfileId();
+		ByteBuffer pl = ByteBuffer.allocate(24 + keyDer.length);
+		pl.putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits())
+			.putLong(data.expiresAt().toEpochMilli()).put(keyDer);
+		byte[] payload = pl.array();
+
+		// Self-check with Minecraft's own validator so a format problem shows a clear message.
+		if (!SignatureValidator.from(mc.services().servicesKeySet(), ServicesKeyType.PROFILE_KEY).validate(payload, data.keySignature()))
+			throw new Exception("your certificate did not validate locally - restart Minecraft");
+
+		String challenge = JsonParser.parseString(call("GET", "/challenge", null, false)).getAsJsonObject().get("challenge").getAsString();
+		byte[] sig = Signer.from(kp.privateKey(), "SHA256withRSA").sign(challenge.getBytes(StandardCharsets.UTF_8));
+
+		Base64.Encoder b64 = Base64.getEncoder();
 		JsonObject body = new JsonObject();
 		body.addProperty("username", u.getName());
-		body.addProperty("serverId", sid.toString());
+		body.addProperty("challenge", challenge);
+		body.addProperty("payload", b64.encodeToString(payload));
+		body.addProperty("certSig", b64.encodeToString(data.keySignature()));
+		body.addProperty("sig", b64.encodeToString(sig));
 		HttpRequest r = HttpRequest.newBuilder(URI.create(Backend.BASE_URL + "/login"))
 			.timeout(Duration.ofSeconds(10)).header("User-Agent", "ObsidianClient").header("Content-Type", "application/json")
 			.POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
 		HttpResponse<String> res = HTTP.send(r, HttpResponse.BodyHandlers.ofString());
 		if (res.statusCode() != 200) {
 			String why = "";
-			try { why = " - " + JsonParser.parseString(res.body()).getAsJsonObject().get("error").getAsString(); } catch (Exception ignored) {}
-			String mj = "";
-			try { mj = " (Mojang answered " + JsonParser.parseString(res.body()).getAsJsonObject().get("mojang").getAsInt() + ")"; } catch (Exception ignored) {}
-			throw new Exception("login failed " + res.statusCode() + why + mj + " as " + u.getName());
+			try { why = JsonParser.parseString(res.body()).getAsJsonObject().get("error").getAsString(); } catch (Exception ignored) {}
+			throw new Exception("login failed " + res.statusCode() + (why.isEmpty() ? "" : " - " + why));
 		}
 		JsonObject o = JsonParser.parseString(res.body()).getAsJsonObject();
 		token = o.get("token").getAsString();

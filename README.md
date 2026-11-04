@@ -40,7 +40,7 @@ reports a renamed method, it is a small fix.
 ## Obsidian roles and nametags (backend)
 Other Obsidian users see a role logo on your nametag. Roles: Member, Media, Staff, High Staff, Owner. Only the admin
 (UUID in `backend/wrangler.toml` and `Backend.java`) can change roles and colours, from the **ADMIN** tab in the menu.
-Players prove who they are through Mojang, so nobody can fake a UUID. Your Minecraft access token never leaves your PC.
+Players prove who they are with the certificate Mojang signed for their account, so nobody can fake a UUID. Your tokens and private key never leave your PC.
 
 The backend is a small Cloudflare Worker in `backend/`. Setup:
 1. Make a free Cloudflare account.

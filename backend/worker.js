@@ -1,6 +1,9 @@
 // Obsidian Client backend (Cloudflare Worker + D1).
-// - Players prove who they are through Mojang (joinServer / hasJoined), so nobody can fake a UUID.
+// - Players prove who they are with the certificate Mojang signed for their account (checked here, offline),
+//   so nobody can fake a UUID. Mojang blocks requests from Cloudflare, so we never call Mojang.
 // - Only ADMIN_UUID can change roles and colours.
+import KEYS from "./mojang-keys.json";
+
 const ROLES = ["member", "media", "staff", "high_staff", "owner"];
 const ONLINE_MS = 10 * 60 * 1000;   // a player counts as online for 10 min after their last heartbeat
 const TOKEN_MS = 6 * 3600 * 1000;
@@ -60,12 +63,47 @@ async function auth(env, req) {
 	} catch { return null; }
 }
 
-async function verifyJoin(env, username, serverId, body) {
-	if (env.MOCK_AUTH === "1") return { id: body.mockUuid, name: username }; // local testing only (.dev.vars)
-	const r = await fetch("https://sessionserver.mojang.com/session/minecraft/hasJoined?username="
-		+ encodeURIComponent(username) + "&serverId=" + serverId, { headers: { "user-agent": "ObsidianClientBackend" } });
-	if (r.status === 200) return await r.json();
-	return { failed: r.status };
+const unb64 = (s) => Uint8Array.from(atob(String(s).replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+// Mojang signed (uuid, expiry, public key) for every account. Check that signature with Mojang's published keys.
+async function mojangSigned(payload, certSig) {
+	for (const k of (KEYS.playerCertificateKeys || [])) {
+		try {
+			const key = await crypto.subtle.importKey("spki", unb64(k.publicKey), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-1" }, false, ["verify"]);
+			if (await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, certSig, payload)) return true;
+		} catch { /* try next key */ }
+	}
+	return false;
+}
+
+// Returns { uuid } when the client proved it owns the account, otherwise { error }.
+async function verifyCertificate(b, challenge) {
+	let payload, certSig, sig;
+	try { payload = unb64(b.payload); certSig = unb64(b.certSig); sig = unb64(b.sig); } catch { return { error: "bad encoding" }; }
+	if (payload.length < 40 || payload.length > 1024) return { error: "bad certificate" };
+	if (!await mojangSigned(payload, certSig)) return { error: "certificate not signed by Mojang" };
+	const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+	const uuid = [...payload.slice(0, 16)].map((x) => x.toString(16).padStart(2, "0")).join("");
+	const expires = Number(dv.getBigInt64(16));
+	if (expires + 3600000 < Date.now()) return { error: "certificate expired - restart Minecraft" };
+	try {
+		const key = await crypto.subtle.importKey("spki", payload.slice(24), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+		if (!await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sig, new TextEncoder().encode(challenge))) return { error: "bad signature" };
+	} catch { return { error: "bad key" }; }
+	return { uuid };
+}
+
+// One-time challenge: nonce.expiry.mac  (stateless; single use is enforced in the "used" table)
+async function makeChallenge(env) {
+	const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join("");
+	const base = nonce + "." + (Date.now() + 120000);
+	return base + "." + await sign(env, base);
+}
+async function checkChallenge(env, c) {
+	const parts = String(c || "").split(".");
+	if (parts.length !== 3 || !/^[0-9a-f]{32}$/.test(parts[0])) return false;
+	if (parts[2] !== await sign(env, parts[0] + "." + parts[1])) return false;
+	return Number(parts[1]) > Date.now();
 }
 
 async function roleOf(env, uuid) {
@@ -83,38 +121,23 @@ export default {
 
 			if (p === "/") return json({ ok: true, service: "obsidian-backend" });
 
-			// TEMPORARY diagnostics: how does Mojang answer requests coming from this server?
-			if (p === "/debug/mojang") {
-				const tests = {
-					hasJoined_default: ["https://sessionserver.mojang.com/session/minecraft/hasJoined?username=Notch&serverId=00000000000000000000000000000000", {}],
-					hasJoined_browserUA: ["https://sessionserver.mojang.com/session/minecraft/hasJoined?username=Notch&serverId=00000000000000000000000000000000", { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36", accept: "application/json" } }],
-					profile_api: ["https://sessionserver.mojang.com/session/minecraft/profile/069a79f444e94726a5befca90e38aaf5", {}],
-					api_mojang: ["https://api.mojang.com/users/profiles/minecraft/Notch", {}],
-				};
-				const out = {};
-				for (const [k, [u, o]] of Object.entries(tests)) {
-					try {
-						const r = await fetch(u, o);
-						out[k] = { status: r.status, server: r.headers.get("server"), body: (await r.text()).slice(0, 200) };
-					} catch (e) { out[k] = { error: String(e) }; }
-				}
-				return json(out);
-			}
+			if (p === "/challenge" && m === "GET") return json({ challenge: await makeChallenge(env) });
 
 			if (p === "/login" && m === "POST") {
 				const b = await readBody(req);
-				if (!/^[A-Za-z0-9_]{1,16}$/.test(b.username || "") || !/^[0-9a-f]{16,64}$/.test(b.serverId || "")) return json({ error: "bad request" }, 400);
+				if (!/^[A-Za-z0-9_]{1,16}$/.test(b.username || "")) return json({ error: "bad request" }, 400);
+				if (!await checkChallenge(env, b.challenge)) return json({ error: "challenge expired, try again" }, 400);
 				const now = Date.now();
 				await env.DB.prepare("DELETE FROM used WHERE t < ?").bind(now - 600000).run();
-				const fresh = await env.DB.prepare("INSERT OR IGNORE INTO used (sid, t) VALUES (?, ?)").bind(b.serverId, now).run();
+				const fresh = await env.DB.prepare("INSERT OR IGNORE INTO used (sid, t) VALUES (?, ?)").bind(b.challenge.split(".")[0], now).run();
 				if (!fresh.meta.changes) return json({ error: "replay" }, 409);
-				const prof = await verifyJoin(env, b.username, b.serverId, b);
-				const uuid = prof && !prof.failed && norm(prof.id);
-				if (!uuid) return json({ error: "not verified by Mojang", mojang: prof ? prof.failed : null, user: b.username }, 401);
+				const v = await verifyCertificate(b, b.challenge);
+				if (!v.uuid) return json({ error: v.error }, 401);
+				const uuid = v.uuid;
 				await env.DB.prepare("INSERT INTO presence (uuid, name, seen) VALUES (?,?,?) ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, seen=excluded.seen")
-					.bind(uuid, prof.name, now).run();
+					.bind(uuid, b.username, now).run();
 				await env.DB.prepare("DELETE FROM presence WHERE seen < ?").bind(now - 86400000).run();
-				const { token, exp } = await makeToken(env, uuid, prof.name);
+				const { token, exp } = await makeToken(env, uuid, b.username);
 				const r = await roleOf(env, uuid);
 				return json({ token, exp, uuid, role: r.role, color: r.color, admin: uuid === adminId(env) });
 			}
