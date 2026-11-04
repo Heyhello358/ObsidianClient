@@ -71,9 +71,10 @@ public final class ModuleManager {
 
 		// Client
 		MODULES.add(new DiscordRpcModule());
+		MODULES.add(new NametagModule());
 
 		// Sensible defaults
-		for (String id : new String[] { "fps", "cps", "keystrokes", "togglesprint", "zoom", "coords", "armor", "mainmenu", "discord", "freelook" })
+		for (String id : new String[] { "fps", "cps", "keystrokes", "togglesprint", "zoom", "coords", "armor", "mainmenu", "discord", "freelook", "nametags" })
 			get(id).setEnabled(true);
 	}
 

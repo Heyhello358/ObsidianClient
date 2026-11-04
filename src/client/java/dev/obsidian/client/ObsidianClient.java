@@ -6,6 +6,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 
 import dev.obsidian.client.config.Config;
 import dev.obsidian.client.core.CombatState;
+import dev.obsidian.client.core.ObsidianNet;
 import dev.obsidian.client.core.Stats;
 import dev.obsidian.client.core.UpdateChecker;
 import dev.obsidian.client.gui.ObsidianTitleScreen;
@@ -49,6 +50,7 @@ public class ObsidianClient implements ClientModInitializer {
 			ModuleManager.init();
 			Config.load();
 			UpdateChecker.checkAsync();
+			ObsidianNet.start();
 		});
 		ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> {
 			Config.save();
@@ -107,6 +109,7 @@ public class ObsidianClient implements ClientModInitializer {
 		wasAttack = attack; wasUse = use;
 
 		if (mc.level != null && ++ticks % 20 == 0) Stats.playSeconds++;
+		if (ticks % 60 == 0) ObsidianNet.tick(mc);
 		CombatState.tick(mc);
 		ModuleManager.tick();
 	}

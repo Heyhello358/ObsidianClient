@@ -36,3 +36,14 @@ Run from source with `./gradlew runClient`.
 ## Status
 Source is written against the 1.21.11 Mojang-mapped API but has NOT been compiled yet. If `./gradlew build`
 reports a renamed method, it is a small fix.
+
+## Obsidian roles and nametags (backend)
+Other Obsidian users see a role logo on your nametag. Roles: Member, Media, Staff, High Staff, Owner. Only the admin
+(UUID in `backend/wrangler.toml` and `Backend.java`) can change roles and colours, from the **ADMIN** tab in the menu.
+Players prove who they are through Mojang, so nobody can fake a UUID. Your Minecraft access token never leaves your PC.
+
+The backend is a small Cloudflare Worker in `backend/`. Setup:
+1. Make a free Cloudflare account.
+2. Create an API token ("Edit Cloudflare Workers" template) and copy your Account ID.
+3. In this GitHub repo: Settings > Secrets and variables > Actions, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+4. Run the "Deploy backend" workflow. Put the resulting `https://obsidian-backend.<you>.workers.dev` address into `Backend.java`.

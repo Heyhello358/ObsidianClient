@@ -1,0 +1,10 @@
+name = "obsidian-backend"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+ADMIN_UUID = "f76bed3c-4062-4d8b-ab4a-d7c1f8169202"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "obsidian-backend"

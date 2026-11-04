@@ -10,6 +10,9 @@ import com.mojang.blaze3d.platform.InputConstants;
 import dev.obsidian.client.ModuleManager;
 import dev.obsidian.client.ObsidianClient;
 import dev.obsidian.client.config.Config;
+import dev.obsidian.client.core.Backend;
+import dev.obsidian.client.core.ObsidianNet;
+import dev.obsidian.client.core.Role;
 import dev.obsidian.client.core.Stats;
 import dev.obsidian.client.core.ThemeManager;
 import dev.obsidian.client.core.UpdateChecker;
@@ -27,7 +30,7 @@ import net.minecraft.network.chat.Component;
 /** The Obsidian menu: tabs on top, categories on the left, modules in the middle. */
 public class MenuScreen extends Screen {
 	private enum Tab {
-		MODULES("MODULES"), HUD("HUD"), PROFILES("PROFILES"), THEMES("THEMES"), ACCOUNT("ACCOUNT"), SETTINGS("SETTINGS");
+		MODULES("MODULES"), HUD("HUD"), PROFILES("PROFILES"), THEMES("THEMES"), ACCOUNT("ACCOUNT"), SETTINGS("SETTINGS"), ADMIN("ADMIN");
 		final String label;
 		Tab(String l) { label = l; }
 	}
@@ -36,7 +39,10 @@ public class MenuScreen extends Screen {
 	private static Tab tab = Tab.MODULES;
 	private static Module.Category cat = null;
 
-	private EditBox search;
+	private static final String[] SWATCHES = { "A78BFA", "EF4444", "F97316", "FBBF24", "4ADE80", "22D3EE", "3B82F6", "F472B6" };
+	private EditBox search, uuidBox, colorBox;
+	private int formRole;
+	private double adminScroll;
 	private double scroll;
 	private long opened;
 	private int px, py, pw, ph;
@@ -55,6 +61,13 @@ public class MenuScreen extends Screen {
 		search.setHint(Component.literal("Search modules..."));
 		search.setResponder(s -> scroll = 0);
 		addRenderableWidget(search);
+		uuidBox = new EditBox(font, 0, 0, 150, 14, Component.literal("UUID"));
+		uuidBox.setBordered(false); uuidBox.setMaxLength(40); uuidBox.setHint(Component.literal("Player UUID"));
+		addRenderableWidget(uuidBox);
+		colorBox = new EditBox(font, 0, 0, 70, 14, Component.literal("Colour"));
+		colorBox.setBordered(false); colorBox.setMaxLength(7); colorBox.setHint(Component.literal("#RRGGBB"));
+		addRenderableWidget(colorBox);
+		uuidBox.visible = false; colorBox.visible = false;
 		profiles = Config.profiles();
 	}
 
@@ -86,9 +99,18 @@ public class MenuScreen extends Screen {
 	private int rowY(int i) { return listTop() + (i / 2) * (ROWH + GAP) - (int) scroll; }
 	private int maxScroll(int n) { return Math.max(0, ((n + 1) / 2) * (ROWH + GAP) - (listBottom() - listTop())); }
 
+	private List<Tab> tabs() {
+		List<Tab> l = new ArrayList<>();
+		boolean showAdmin = ObsidianNet.admin
+			|| Backend.ADMIN_UUID.equalsIgnoreCase(minecraft.getUser().getProfileId().toString());
+		for (Tab t : Tab.values()) if (t != Tab.ADMIN || showAdmin) l.add(t);
+		return l;
+	}
+
 	private int tabX(int i) {
 		int x = px + 118;
-		for (int k = 0; k < i; k++) x += font.width(Tab.values()[k].label) + 18;
+		List<Tab> ts = tabs();
+		for (int k = 0; k < i; k++) x += font.width(ts.get(k).label) + 18;
 		return x;
 	}
 
@@ -115,8 +137,9 @@ public class MenuScreen extends Screen {
 		Draw.text(g, font, "CLIENT", px + 40, y0 + 18, ThemeManager.dim(), t);
 
 		// tabs
-		for (int i = 0; i < Tab.values().length; i++) {
-			Tab tb = Tab.values()[i];
+		List<Tab> tabList = tabs();
+		for (int i = 0; i < tabList.size(); i++) {
+			Tab tb = tabList.get(i);
 			int x = tabX(i), w = font.width(tb.label) + 12;
 			boolean active = tb == tab, hover = Draw.in(mx, my, x, y0 + 8, w, 20);
 			Draw.rect(g, x, y0 + 8, w, 20, Draw.a(active || hover ? ThemeManager.cardHover() : ThemeManager.card(), t));
@@ -128,6 +151,8 @@ public class MenuScreen extends Screen {
 		renderSidebar(g, mx, my, y0, t);
 		search.visible = tab == Tab.MODULES;
 		search.active = tab == Tab.MODULES;
+		uuidBox.visible = tab == Tab.ADMIN; uuidBox.active = tab == Tab.ADMIN;
+		colorBox.visible = tab == Tab.ADMIN; colorBox.active = tab == Tab.ADMIN;
 
 		int oy = py; py = y0; // draw content relative to the sliding panel
 		switch (tab) {
@@ -136,6 +161,7 @@ public class MenuScreen extends Screen {
 			case THEMES -> renderThemes(g, mx, my, t);
 			case ACCOUNT -> renderAccount(g, t);
 			case SETTINGS -> renderSettings(g, mx, my, t);
+			case ADMIN -> renderAdmin(g, mx, my, t);
 			default -> {}
 		}
 		py = oy;
@@ -247,6 +273,7 @@ public class MenuScreen extends Screen {
 			"Hits landed:  " + Stats.hits,
 			"Best combo:  " + Stats.bestCombo,
 			"Total clicks:  " + Stats.clicks,
+			"Obsidian role:  " + ObsidianNet.myRole.label + "   (" + ObsidianNet.status + ")",
 			"Active profile:  " + (Config.activeProfile.isEmpty() ? "none" : Config.activeProfile),
 		};
 		y += 18;
@@ -276,6 +303,89 @@ public class MenuScreen extends Screen {
 		Draw.text(g, font, "Keys: Right Shift menu | C zoom | Alt freelook | V sprint | B sneak (change in Controls)", x, y, ThemeManager.dim(), t);
 	}
 
+	// ---- admin tab ----
+	private int ax() { return cx(); }
+	private int ay() { return py + HEADER + 12; }
+	private int aw() { return cw(); }
+
+	private void renderAdmin(GuiGraphics g, int mx, int my, float t) {
+		int x = ax(), y = ay(), w = aw();
+		Draw.text(g, font, "ADMIN - add a player by UUID, give a role and a colour", x, y, ThemeManager.accent2(), t);
+
+		Draw.rect(g, x, y + 18, w - 108, 18, Draw.a(ThemeManager.card(), t));
+		uuidBox.setX(x + 6); uuidBox.setY(y + 22); uuidBox.setWidth(w - 108 - 12);
+
+		Role role = Role.values()[formRole];
+		boolean hr = Draw.in(mx, my, x + w - 102, y + 18, 102, 18);
+		Draw.rect(g, x + w - 102, y + 18, 102, 18, Draw.a(hr ? ThemeManager.cardHover() : ThemeManager.card(), t));
+		Draw.text(g, font, role.label, x + w - 102 + (102 - font.width(role.label)) / 2, y + 23, 0xFF000000 | role.color, t);
+
+		Draw.rect(g, x, y + 42, 84, 18, Draw.a(ThemeManager.card(), t));
+		colorBox.setX(x + 6); colorBox.setY(y + 46); colorBox.setWidth(72);
+		for (int i = 0; i < SWATCHES.length; i++) {
+			int sx = x + 92 + i * 20;
+			g.fill(sx, y + 43, sx + 16, y + 59, Draw.a(0xFF000000 | Integer.parseInt(SWATCHES[i], 16), t));
+		}
+		boolean hs = Draw.in(mx, my, x + w - 70, y + 42, 70, 18);
+		Draw.rect(g, x + w - 70, y + 42, 70, 18, Draw.a(hs ? ThemeManager.accent() : ThemeManager.cardHover(), t));
+		Draw.text(g, font, "Save", x + w - 70 + (70 - font.width("Save")) / 2, y + 47, 0xFFFFFFFF, t);
+
+		Draw.text(g, font, ObsidianNet.adminMsg.isEmpty() ? "Click a player below to edit them. Empty colour = role colour." : ObsidianNet.adminMsg,
+			x, y + 66, ThemeManager.dim(), t);
+
+		int top = y + 82, bottom = listBottom();
+		g.enableScissor(x - 2, top, x + w + 2, bottom);
+		int ry = top - (int) adminScroll;
+		for (ObsidianNet.Entry en : ObsidianNet.adminList) {
+			if (ry + 20 >= top && ry <= bottom) {
+				boolean hv = Draw.in(mx, my, x, ry, w, 20) && my >= top && my < bottom;
+				Draw.rect(g, x, ry, w, 20, Draw.a(hv ? ThemeManager.cardHover() : ThemeManager.card(), t));
+				g.fill(x + 6, ry + 8, x + 10, ry + 12, Draw.a(en.online() ? 0xFF4ADE80 : 0xFF555566, t));
+				int rc = en.color().isEmpty() ? en.role().color : ObsidianNet.parseColor(en.color());
+				Draw.text(g, font, en.role().label, x + 16, ry + 6, 0xFF000000 | rc, t);
+				String nm = en.name().isEmpty() ? en.uuid() : en.name();
+				Draw.text(g, font, font.plainSubstrByWidth(nm, w - 150), x + 90, ry + 6, 0xFFFFFFFF, t);
+				if (!en.color().isEmpty()) g.fill(x + w - 40, ry + 5, x + w - 28, ry + 15, Draw.a(0xFF000000 | rc, t));
+				Draw.text(g, font, "x", x + w - 14, ry + 6, 0xFFEF4444, t);
+			}
+			ry += 22;
+		}
+		g.disableScissor();
+	}
+
+	private boolean adminClick(double mx, double my, int button) {
+		int x = ax(), y = ay(), w = aw();
+		if (Draw.in(mx, my, x + w - 102, y + 18, 102, 18)) {
+			int n = Role.values().length;
+			formRole = ((formRole + (button == 1 ? -1 : 1)) % n + n) % n;
+			return true;
+		}
+		for (int i = 0; i < SWATCHES.length; i++) {
+			int sx = x + 92 + i * 20;
+			if (Draw.in(mx, my, sx, y + 43, 16, 16)) { colorBox.setValue("#" + SWATCHES[i]); return true; }
+		}
+		if (Draw.in(mx, my, x + w - 70, y + 42, 70, 18)) {
+			ObsidianNet.adminSet(uuidBox.getValue(), Role.values()[formRole], colorBox.getValue());
+			return true;
+		}
+		int top = y + 82, ry = top - (int) adminScroll;
+		if (my >= top && my < listBottom()) {
+			for (ObsidianNet.Entry en : new ArrayList<>(ObsidianNet.adminList)) {
+				if (Draw.in(mx, my, x, ry, w, 20)) {
+					if (mx >= x + w - 24) ObsidianNet.adminRemove(en.uuid());
+					else {
+						uuidBox.setValue(en.uuid());
+						colorBox.setValue(en.color().isEmpty() ? "" : "#" + en.color());
+						formRole = en.role().ordinal();
+					}
+					return true;
+				}
+				ry += 22;
+			}
+		}
+		return false;
+	}
+
 	// ---- input ----
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean dbl) {
@@ -284,13 +394,15 @@ public class MenuScreen extends Screen {
 		int b = e.button();
 		if (Draw.in(mx, my, px + pw - 20, py + 6, 16, 22)) { onClose(); return true; }
 
-		for (int i = 0; i < Tab.values().length; i++) {
-			int x = tabX(i), w = font.width(Tab.values()[i].label) + 12;
+		List<Tab> clickTabs = tabs();
+		for (int i = 0; i < clickTabs.size(); i++) {
+			int x = tabX(i), w = font.width(clickTabs.get(i).label) + 12;
 			if (Draw.in(mx, my, x, py + 8, w, 20)) {
-				Tab tb = Tab.values()[i];
+				Tab tb = clickTabs.get(i);
 				if (tb == Tab.HUD) { minecraft.setScreen(new HudEditorScreen(this)); return true; }
 				tab = tb; scroll = 0;
 				if (tb == Tab.PROFILES) profiles = Config.profiles();
+				if (tb == Tab.ADMIN) ObsidianNet.adminRefresh();
 				return true;
 			}
 		}
@@ -349,6 +461,11 @@ public class MenuScreen extends Screen {
 				if (Draw.in(mx, my, x, y, 120, 20)) { Util.getPlatform().openUri(DiscordRpcModule.INVITE); return true; }
 				if (Draw.in(mx, my, x + 126, y, 120, 20)) { Util.getPlatform().openUri(UpdateChecker.url); return true; }
 			}
+			case ADMIN -> {
+				if (adminClick(mx, my, b)) return true;
+				if (Draw.in(mx, my, ax(), ay() + 18, aw() - 108, 18) || Draw.in(mx, my, ax(), ay() + 42, 84, 18))
+					return super.mouseClicked(e, dbl);
+			}
 			default -> {}
 		}
 		return super.mouseClicked(e, dbl);
@@ -371,6 +488,7 @@ public class MenuScreen extends Screen {
 	@Override
 	public boolean mouseScrolled(double mx, double my, double sx, double sy) {
 		if (tab == Tab.MODULES) { scroll = Math.max(0, Math.min(maxScroll(visible().size()), scroll - sy * 20)); return true; }
+		if (tab == Tab.ADMIN) { adminScroll = Math.max(0, Math.min(Math.max(0, ObsidianNet.adminList.size() * 22 - (listBottom() - (ay() + 90))), adminScroll - sy * 20)); return true; }
 		return super.mouseScrolled(mx, my, sx, sy);
 	}
 
