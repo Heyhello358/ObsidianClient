@@ -83,6 +83,24 @@ export default {
 
 			if (p === "/") return json({ ok: true, service: "obsidian-backend" });
 
+			// TEMPORARY diagnostics: how does Mojang answer requests coming from this server?
+			if (p === "/debug/mojang") {
+				const tests = {
+					hasJoined_default: ["https://sessionserver.mojang.com/session/minecraft/hasJoined?username=Notch&serverId=00000000000000000000000000000000", {}],
+					hasJoined_browserUA: ["https://sessionserver.mojang.com/session/minecraft/hasJoined?username=Notch&serverId=00000000000000000000000000000000", { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36", accept: "application/json" } }],
+					profile_api: ["https://sessionserver.mojang.com/session/minecraft/profile/069a79f444e94726a5befca90e38aaf5", {}],
+					api_mojang: ["https://api.mojang.com/users/profiles/minecraft/Notch", {}],
+				};
+				const out = {};
+				for (const [k, [u, o]] of Object.entries(tests)) {
+					try {
+						const r = await fetch(u, o);
+						out[k] = { status: r.status, server: r.headers.get("server"), body: (await r.text()).slice(0, 200) };
+					} catch (e) { out[k] = { error: String(e) }; }
+				}
+				return json(out);
+			}
+
 			if (p === "/login" && m === "POST") {
 				const b = await readBody(req);
 				if (!/^[A-Za-z0-9_]{1,16}$/.test(b.username || "") || !/^[0-9a-f]{16,64}$/.test(b.serverId || "")) return json({ error: "bad request" }, 400);

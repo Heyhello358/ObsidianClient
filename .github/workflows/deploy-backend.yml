@@ -27,3 +27,10 @@ jobs:
           ID=$(npx --yes wrangler@4 d1 list --json | python3 -c "import sys,json; print(next(d['uuid'] for d in json.load(sys.stdin) if d['name']=='obsidian-backend'))")
           echo "database_id = \"$ID\"" >> wrangler.toml
           npx --yes wrangler@4 deploy
+      - name: Diagnostics - how does Mojang answer the server? (temporary)
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          sleep 8
+          echo "== from the Cloudflare Worker"; curl -sS --max-time 40 https://obsidian-backend.obsidianclient.workers.dev/debug/mojang; echo
+          echo "== from a GitHub runner, for comparison"
+          curl -sS -o /dev/null -w "hasJoined direct: %{http_code}\n" "https://sessionserver.mojang.com/session/minecraft/hasJoined?username=Notch&serverId=00000000000000000000000000000000"
