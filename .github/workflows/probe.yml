@@ -14,7 +14,5 @@ jobs:
           C=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' | grep -v intermediary | head -1)
           M=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-common-1.21.11*.jar' | grep -v intermediary | head -1)
           CP="$C:$M"
-          echo "== classes"; for J in $C $M; do unzip -l $J | awk '{print $4}' | grep -iE "ProfileKeyPair|PlayerPublicKey|SignatureValidator|/Signer|util/Crypt"; done
-          echo "== Minecraft key methods"; javap -p -cp "$CP" net.minecraft.client.Minecraft | grep -iE "keypair|KeyPair|profileKey"
-          for c in net.minecraft.world.entity.player.ProfileKeyPair net.minecraft.world.entity.player.PlayerPublicKey 'net.minecraft.world.entity.player.PlayerPublicKey$Data' net.minecraft.client.multiplayer.ProfileKeyPairManager net.minecraft.util.SignatureValidator net.minecraft.util.Signer; do echo "== $c"; javap -p -cp "$CP" "$c" 2>&1 | grep -vE "^Compiled|lambda" | head -30; done
-          echo "== publickeys from runner"; curl -sS --max-time 20 https://api.minecraftservices.com/publickeys | head -c 700; echo
+          for c in net.minecraft.world.entity.player.ProfilePublicKey 'net.minecraft.world.entity.player.ProfilePublicKey$Data'; do echo "== $c"; javap -p -cp "$CP" "$c" 2>&1 | grep -vE "^Compiled|lambda|method_" | head -30; done
+          echo "== publickeys structure"; curl -sS --max-time 20 https://api.minecraftservices.com/publickeys | python3 -c "import sys,json; d=json.load(sys.stdin); print({k:len(v) for k,v in d.items()})"
