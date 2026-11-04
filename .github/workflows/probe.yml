@@ -14,6 +14,5 @@ jobs:
           C=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' | grep -v intermediary | head -1)
           M=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-common-1.21.11*.jar' | grep -v intermediary | head -1)
           CP="$C:$M"
-          echo "== cape classes"; for J in $C $M; do unzip -l $J | awk '{print $4}' | grep -iE "cape|PlayerSkin|ClientAsset|AvatarRenderState" ; done
-          for c in net.minecraft.world.entity.player.PlayerSkin 'net.minecraft.world.entity.player.PlayerSkin$Patch' net.minecraft.core.ClientAsset 'net.minecraft.core.ClientAsset$ResourceTexture' 'net.minecraft.core.ClientAsset$Texture' net.minecraft.client.renderer.entity.state.AvatarRenderState; do echo "== $c"; javap -p -cp "$CP" "$c" 2>&1 | grep -vE "^Compiled" | head -40; done
-          echo "== AbstractClientPlayer skin"; javap -p -cp "$CP" net.minecraft.client.player.AbstractClientPlayer | grep -iE "skin|cape"
+          for c in net.minecraft.client.model.player.PlayerCapeModel net.minecraft.client.renderer.entity.layers.CapeLayer net.minecraft.client.renderer.entity.player.AvatarRenderer; do echo "== $c"; javap -p -cp "$CP" "$c" 2>&1 | grep -vE "^Compiled" | head -40; done
+          echo "== find AvatarRenderer"; unzip -l $C | awk '{print $4}' | grep -i "AvatarRenderer"
