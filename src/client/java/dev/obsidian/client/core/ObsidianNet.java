@@ -133,7 +133,13 @@ public final class ObsidianNet {
 			.timeout(Duration.ofSeconds(10)).header("User-Agent", "ObsidianClient").header("Content-Type", "application/json")
 			.POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
 		HttpResponse<String> res = HTTP.send(r, HttpResponse.BodyHandlers.ofString());
-		if (res.statusCode() != 200) throw new Exception("login failed (" + res.statusCode() + ")");
+		if (res.statusCode() != 200) {
+			String why = "";
+			try { why = " - " + JsonParser.parseString(res.body()).getAsJsonObject().get("error").getAsString(); } catch (Exception ignored) {}
+			String mj = "";
+			try { mj = " (Mojang answered " + JsonParser.parseString(res.body()).getAsJsonObject().get("mojang").getAsInt() + ")"; } catch (Exception ignored) {}
+			throw new Exception("login failed " + res.statusCode() + why + mj + " as " + u.getName());
+		}
 		JsonObject o = JsonParser.parseString(res.body()).getAsJsonObject();
 		token = o.get("token").getAsString();
 		tokenExp = o.get("exp").getAsLong();

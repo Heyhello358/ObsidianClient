@@ -63,8 +63,9 @@ async function auth(env, req) {
 async function verifyJoin(env, username, serverId, body) {
 	if (env.MOCK_AUTH === "1") return { id: body.mockUuid, name: username }; // local testing only (.dev.vars)
 	const r = await fetch("https://sessionserver.mojang.com/session/minecraft/hasJoined?username="
-		+ encodeURIComponent(username) + "&serverId=" + serverId);
-	return r.status === 200 ? await r.json() : null;
+		+ encodeURIComponent(username) + "&serverId=" + serverId, { headers: { "user-agent": "ObsidianClientBackend" } });
+	if (r.status === 200) return await r.json();
+	return { failed: r.status };
 }
 
 async function roleOf(env, uuid) {
@@ -90,8 +91,8 @@ export default {
 				const fresh = await env.DB.prepare("INSERT OR IGNORE INTO used (sid, t) VALUES (?, ?)").bind(b.serverId, now).run();
 				if (!fresh.meta.changes) return json({ error: "replay" }, 409);
 				const prof = await verifyJoin(env, b.username, b.serverId, b);
-				const uuid = prof && norm(prof.id);
-				if (!uuid) return json({ error: "not verified by Mojang" }, 401);
+				const uuid = prof && !prof.failed && norm(prof.id);
+				if (!uuid) return json({ error: "not verified by Mojang", mojang: prof ? prof.failed : null, user: b.username }, 401);
 				await env.DB.prepare("INSERT INTO presence (uuid, name, seen) VALUES (?,?,?) ON CONFLICT(uuid) DO UPDATE SET name=excluded.name, seen=excluded.seen")
 					.bind(uuid, prof.name, now).run();
 				await env.DB.prepare("DELETE FROM presence WHERE seen < ?").bind(now - 86400000).run();
