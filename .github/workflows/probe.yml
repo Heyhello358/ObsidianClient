@@ -1,0 +1,20 @@
+name: Probe (temporary)
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: 25 }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew build -x test
+      - name: Probe
+        run: |
+          C=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-clientonly-1.21.11*.jar' | grep -v intermediary | head -1)
+          M=$(find ~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft -name 'minecraft-common-1.21.11*.jar' | grep -v intermediary | head -1)
+          CP="$C:$M"
+          echo "== classes"; for J in $C $M; do unzip -l $J | awk '{print $4}' | grep -iE "ProfileKeyPair|PlayerPublicKey|SignatureValidator|/Signer|util/Crypt"; done
+          echo "== Minecraft key methods"; javap -p -cp "$CP" net.minecraft.client.Minecraft | grep -iE "keypair|KeyPair|profileKey"
+          for c in net.minecraft.world.entity.player.ProfileKeyPair net.minecraft.world.entity.player.PlayerPublicKey 'net.minecraft.world.entity.player.PlayerPublicKey$Data' net.minecraft.client.multiplayer.ProfileKeyPairManager net.minecraft.util.SignatureValidator net.minecraft.util.Signer; do echo "== $c"; javap -p -cp "$CP" "$c" 2>&1 | grep -vE "^Compiled|lambda" | head -30; done
+          echo "== publickeys from runner"; curl -sS --max-time 20 https://api.minecraftservices.com/publickeys | head -c 700; echo
